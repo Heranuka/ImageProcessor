@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Processing Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px auto;
+            max-width: 450px;
+            padding: 0 20px;
+            background: #f9f9f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #004aad;
+        }
+        form {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        input[type="file"], select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+        button {
+            cursor: pointer;
+            background-color: #004aad;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #003380;
+        }
+        #status {
+            min-height: 40px;
+            padding: 12px;
+            border-radius: 6px;
+            background-color: #eef3ff;
+            color: #004aad;
+            font-weight: 600;
+            text-align: center;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        #status.error {
+            background-color: #ffdede;
+            color: #cc0000;
+        }
+        #status.processing {
+            animation: pulse 2s infinite;
+        }
+        img {
+            margin-top: 15px;
+            border-radius: 8px;
+            box-shadow: 0 3px 12px rgb(0 68 173 / 0.2);
+            max-width: 100%;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @keyframes pulse {
+            0%, 100% { background-color: #eef3ff; }
+            50% { background-color: #ccd9ff; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Processing Service</h1>
+    <form id="uploadForm" enctype="multipart/form-data" novalidate>
+        <input type="file" name="file" accept="image/*" required />
+        <select name="operation" aria-label="Select processing operation" required>
+            <option value="resize">Resize</option>
+            <option value="thumbnail">Thumbnail</option>
+            <option value="watermark">Watermark</option>
+        </select>
+        <button type="submit">Upload</button>
+    </form>
+
+    <h2>Status</h2>
+    <div id="status" aria-live="polite"></div>
+
+    <script>
+        (function() {
+            const form = document.getElementById('uploadForm');
+            const statusDiv = document.getElementById('status');
+
+            // Utility: clear any existing interval
+            let statusInterval = null;
+            function clearStatusInterval() {
+                if (statusInterval !== null) {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                }
+            }
+
+            // Set status with optional class for styling
+            function setStatus(text, cls) {
+                statusDiv.textContent = text;
+                statusDiv.className = '';
+                if (cls) statusDiv.classList.add(cls);
+            }
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                clearStatusInterval();
+                setStatus('Uploading image...', 'processing');
+
+                const formData = new FormData(form);
+                try {
+                    const res = await fetch('/image/upload', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                    const data = await res.json();
+
+                    console.log('Upload response:', data);
+                    setStatus(`Image uploaded successfully! ID: ${data.id}`, null);
+
+                    statusInterval = setInterval(async () => {
+                        try {
+                            const statusRes = await fetch(`/image/${data.id}/status`);
+                            if (!statusRes.ok) throw new Error(`Status error: ${statusRes.status}`);
+                            const statusData = await statusRes.json();
+
+                            if (!statusData.status) throw new Error('No status in response');
+
+                            const statusText = statusData.status.toLowerCase();
+
+                            if (statusText === 'processing...' || statusText === 'new' || statusText === 'uploaded') {
+                                setStatus(`Status: ${statusData.status}`, 'processing');
+                            } else {
+                                clearStatusInterval();
+
+                                if (statusText === 'error') {
+                                    setStatus('Error occurred while processing the image.', 'error');
+                                    return;
+                                }
+
+                                // Assume ready state — show image
+                                setStatus(`Status: ${statusData.status}`, null);
+                                const img = document.createElement('img');
+                                img.setAttribute('src', `/image/${data.id}/file`);
+                                img.setAttribute('alt', 'Processed Image');
+                                statusDiv.appendChild(img);
+                            }
+                        } catch (err) {
+                            clearStatusInterval();
+                            console.error('Error checking status:', err);
+                            setStatus(`Error checking status: ${err.message}`, 'error');
+                        }
+                    }, 2000);
+
+                } catch (err) {
+                    clearStatusInterval();
+                    console.error('Upload failed:', err);
+                    setStatus(`Failed to upload image: ${err.message}`, 'error');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
