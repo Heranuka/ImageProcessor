@@ -48,7 +48,7 @@ services:
       - app-network
   kafka-local:
     container_name: kafka-local
-    image: docker.io/bitnami/kafka:latest
+    image: docker.io/soldevelo/kafka:latest
     ports:
      - "9092:9092"
      - "9093:9093"
